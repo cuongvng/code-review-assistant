@@ -8,16 +8,21 @@ dotenv.config();
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 
 export async function getPullRequestFiles(owner: string, repo: string, pull_number: number) {
-    const data = await octokit.pulls.listFiles({
+    // List all files in the pull request, at the state of the latest commit
+    // Then extract the latest commit id
+    const fileList = await octokit.pulls.listFiles({
         owner,
         repo,
         pull_number
     });
-    return data;
+    const data = fileList.data;
+    const commitId = data[0].contents_url.split('=').pop();
+    return [data, commitId];
 }
 
+
 export async function summarizePullRequest(owner: string, repo: string, pr_number: number) {
-    const files = await getPullRequestFiles(owner, repo, pr_number);
+    const [files, commitId] = await getPullRequestFiles(owner, repo, pr_number);
     const summaries = await Promise.all(files.map( async (file) => {
         const summary = await getSummary(file.patch); // TODO: Implement getSummary with OpenAI
         return  {
@@ -41,7 +46,52 @@ export async function reviewCode(owner: string, repo: string, pull_number: numbe
     return reviews;
 }
 
+export async function createComment(owner: string, repo: string, pull_number: number, commit_id: string, comment: any, path: string, line: number) {
+    const cmt ={
+        owner: owner,
+        repo: repo,
+        pull_number: pull_number,
+        commit_id: commit_id,
+        path: path,
+        line: line,
+        body: comment,
+    }
+    try {
+        const response = await octokit.pulls.createReviewComment(cmt);
+        console.log(response);
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+export async function createReview(owner: string, repo: string, pull_number: number, commit_id: string, comments: any) {
+    const review ={
+        owner: owner,
+        repo: repo,
+        pull_number: pull_number,
+        commit_id: commit_id,
+        body: 'This is close to perfect! Please address the suggested inline change.',
+        event: 'REQUEST_CHANGES',
+        comments: [
+          {
+            path: 'requirements.txt',
+            position: 4,
+            body: comments // route openai output here 
+          }
+        ],
+    }
+    try {
+        const response = await octokit.pulls.createReview(review);
+        console.log(response);
+    } catch (error) {
+        console.error(error);
+    }
+     
+}
+
 
 // Tests
-// getPullRequestFiles("cuongvng", "neural-networks-with-PyTorch", 11).then( data => {console.log(data)})
+// getPullRequestFiles("cuongvng", "srgan-pytorch", 1).then( data => {console.log(data[1])})
 
+// getPullRequestCommits("cuongvng", "srgan-pytorch", 1).then( data => {console.log(data)})
+// createComment("cuongvng", "srgan-pytorch", 1, "d8b18fe7e9a8c3f5090291fbfe75b010654042a7", "This is a test comment", "src/gen_sr.py", 11)
