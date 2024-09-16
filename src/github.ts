@@ -47,6 +47,9 @@ export async function summarizePullRequest(owner: string, repo: string, pr_numbe
 // }
 
 export async function createComment(owner: string, repo: string, pull_number: number, commit_id: string, body: any, path: string, start_line: number, line: number) {
+    if (start_line == line) { // single line comment, expand to multi-line.
+        line += 1;
+    }
     const cmt ={
         owner: owner,
         repo: repo,
@@ -84,8 +87,20 @@ export async function createReview(owner: string, repo: string, pull_number: num
      
 }
 
+export async function main(owner: string, repo: string, pull_number: number) {
+    const [files, commitId] = await getPullRequestFiles(owner, repo, pull_number);
+    const comments = []
+    for (const file of files) {
+        const filename = file.filename;
+        const patch = file.patch;
+        const cmtBody = await getOpenAIReview(patch);
+        const cmt = await createComment(owner, repo, pull_number, commitId, cmtBody, filename, 1);
+        comments.push(cmt);
+    }
+    await createReview(owner, repo, pull_number, commitId, comments);
+}
 // Tests
 // getPullRequestFiles("cuongvng", "srgan-pytorch", 1).then( data => {console.log(data[1])})
 
 // getPullRequestCommits("cuongvng", "srgan-pytorch", 1).then( data => {console.log(data)})
-// createComment("cuongvng", "srgan-pytorch", 1, "d8b18fe7e9a8c3f5090291fbfe75b010654042a7", "This is a test comment", "src/gen_sr.py", 11, 12)
+createComment("cuongvng", "srgan-pytorch", 1, "d8b18fe7e9a8c3f5090291fbfe75b010654042a7", "This is a test comment", "src/gen_sr.py", 11, 11)
