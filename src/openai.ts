@@ -1,7 +1,7 @@
 import { OpenAI } from 'openai';
 import dotenv from 'dotenv';
 dotenv.config();
-import {systemPrompt, userPrompt} from './prompt';
+import {systemPrompt} from './prompt';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,

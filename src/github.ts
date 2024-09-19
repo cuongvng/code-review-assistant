@@ -2,12 +2,12 @@
 import { Octokit } from "@octokit/rest";
 import dotenv from "dotenv";
 import { get } from "http";
-import { getOpenAIReview, getSummary } from "./openai";
+import { getOpenAIReview } from "./openai";
 dotenv.config();
 
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 
-export async function getPullRequestFiles(owner: string, repo: string, pull_number: number): Promise<[any, string]> {
+export async function getPullRequestFiles(owner: string, repo: string, pull_number: number) {
     // List all files in the pull request, at the state of the latest commit
     // Then extract the latest commit id
     const fileList = await octokit.pulls.listFiles({
@@ -16,22 +16,44 @@ export async function getPullRequestFiles(owner: string, repo: string, pull_numb
         pull_number
     });
     const data = fileList.data;
-    const commitId = data[0].contents_url.split('=').pop();
-    return [data, commitId];
+    // const commitId = data[0].contents_url.split('=').pop();
+    return data;
 }
 
+export async function createReview(owner: string, repo: string, pull_number: number, comments: any) {
+    const comment ={
+        owner: owner,
+        repo: repo,
+        issue_number: pull_number,
+        body: comments,
+    }
+    try {
+        const response = await octokit.issues.createComment(comment);
+        console.log(response);
+    } catch (error) {
+        console.error(error);
+    }
+     
+}
 
-export async function summarizePullRequest(owner: string, repo: string, pr_number: number) {
-    const [files, commitId] = await getPullRequestFiles(owner, repo, pr_number);
-    const summaries = await Promise.all(files.map( async (file) => {
-        const summary = await getSummary(file.patch); // TODO: Implement getSummary with OpenAI
-        return  {
-            filename: file.filename,
-            summary: summary
+export async function main(owner: string, repo: string, pull_number: number) {
+    try{
+        const files = await getPullRequestFiles(owner, repo, pull_number);
+        var prompt = "";
+        for (const file_data of files) {
+            const filename = file_data.filename;
+            const patch = file_data.patch;
+            prompt += `Filename: ${filename}\n`;
+            prompt += `Patch: ${patch}\n\n`;
         }
-    })).catch((error) => {console.error(error)});
-    console.log(summaries)
-    return summaries;
+        console.log("Prompt:\n", prompt);
+
+        const comments = await getOpenAIReview(prompt);
+        console.log(comments);
+        await createReview(owner, repo, pull_number, comments);
+    } catch (error) {
+        console.error(error);
+    }
 }
 
 // export async function reviewCode(owner: string, repo: string, pull_number: number) {
@@ -68,44 +90,4 @@ export async function summarizePullRequest(owner: string, repo: string, pr_numbe
 //     }
 // }
 
-export async function createReview(owner: string, repo: string, pull_number: number, commit_id: string, comments: any) {
-    const comment ={
-        owner: owner,
-        repo: repo,
-        issue_number: pull_number,
-        body: comments,
-    }
-    try {
-        const response = await octokit.issues.createComment(comment);
-        console.log(response);
-    } catch (error) {
-        console.error(error);
-    }
-     
-}
-
-export async function main(owner: string, repo: string, pull_number: number) {
-    try{
-        const [files, commitId] = await getPullRequestFiles(owner, repo, pull_number);
-        var prompt = "";
-        for (const file_data of files) {
-            const filename = file_data.filename;
-            const patch = file_data.patch;
-            prompt += `Filename: ${filename}\n`;
-            prompt += `Patch: ${patch}\n\n`;
-        }
-        console.log("Prompt:\n", prompt);
-
-        const comments = await getOpenAIReview(prompt);
-        console.log(comments);
-        await createReview(owner, repo, pull_number, commitId, comments);
-    } catch (error) {
-        console.error(error);
-    }
-}
-// Tests
-// getPullRequestFiles("cuongvng", "srgan-pytorch", 1).then( data => {console.log(data[1])})
-
-// getPullRequestCommits("cuongvng", "srgan-pytorch", 1).then( data => {console.log(data)})
-// createComment("cuongvng", "srgan-pytorch", 1, "d8b18fe7e9a8c3f5090291fbfe75b010654042a7", "This is a test comment", "src/gen_sr.py", 11, 11)
-main("cuongvng", "srgan-pytorch", 1);
+// main("cuongvng", "srgan-pytorch", 1);
